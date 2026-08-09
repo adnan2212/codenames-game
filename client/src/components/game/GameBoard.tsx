@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { words } from "@/src/data/words";
 import WordCard from "./WordCard";
-import type { GameCard } from "@shared/types/game";
+import type { GameCard, Team, GameStatus } from "@shared/types/game";
 
 function createGameCards(): GameCard[] {
   const startingTeam = Math.random() < 0.5 ? "red" : "blue";
@@ -24,13 +24,15 @@ function createGameCards(): GameCard[] {
   return words.map((word, index) => ({
     id: `card-${index + 1}`,
     word,
-    type: types[index]
+    type: types[index],
+    isRevealed: false
   }));
 }
 
 export default function GameBoard() {
+  const [gameStatus, setGameStatus] = useState<GameStatus>("playing");
+  const [currentTeam, setCurrentTeam] = useState<Team>("red");
   const [cards, setCards] = useState<GameCard[] | null>(null);
-  const [selectedCards, setSelectedCards] = useState<string[]>([]);
   const [isSpymaster, setIsSpymaster] = useState<boolean>(false);
 
   useEffect(() => {
@@ -41,18 +43,51 @@ export default function GameBoard() {
     return <div>Loading...</div>;
   }
 
+  const endTurn = () => {
+    setCurrentTeam((prev) => (prev === "red" ? "blue" : "red"));
+  }
+
   const handleCardSelect = (cardId: string) => {
-    setSelectedCards((prev) => {
-      if (prev.includes(cardId)) {
-        return prev.filter((id) => id !== cardId);
-      } else {
-        return [...prev, cardId];
-      }
+
+    const selectedCard = cards?.find((card) => card.id === cardId);
+    if (!selectedCard || selectedCard.isRevealed || gameStatus !== "playing") {
+      return;
+    }
+
+    setCards((prevCards) => {
+      if (!prevCards) return prevCards;
+
+      return prevCards.map((card) =>
+        card.id === cardId ? { ...card, isRevealed: true } : card
+      );
     });
+
+    if (selectedCard.type === "assassin") {
+      setGameStatus(currentTeam === "red" ? "blue-won" : "red-won");
+      return;
+    }
+
+    if (selectedCard.type !== currentTeam) {
+      endTurn();
+      return;
+    }
   };
+
+  const statusMessage =
+    gameStatus === "red-won"
+      ? "🔴 RED TEAM WINS!"
+        : gameStatus === "blue-won"
+      ? "🔵 BLUE TEAM WINS!"
+      : currentTeam === "red"
+      ? "🔴 RED TEAM'S TURN"
+      : "🔵 BLUE TEAM'S TURN";
 
   return (
     <div>
+      <div className="mb-4 text-center text-xl font-bold">
+        {statusMessage}
+      </div>
+
       <div className="flex items-center justify-center gap-4 mb-5">
         <span>Choose a view:</span>
 
@@ -69,6 +104,19 @@ export default function GameBoard() {
         >
           [ Spymaster ]
         </button>
+
+        {gameStatus !== "playing" && (
+          <button
+            onClick={() => {
+              setGameStatus("playing");
+              setCurrentTeam("red");
+              setCards(createGameCards());
+            }}
+            className="font-bold text-green-600"
+          >
+            [ Reset Game ]
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-5 gap-3">
@@ -76,7 +124,6 @@ export default function GameBoard() {
           <WordCard 
             key={card.id}
             card={card} 
-            isSelected={selectedCards.includes(card.id)}
             onSelect={() => handleCardSelect(card.id)}
             isSpymaster={isSpymaster}
           />
