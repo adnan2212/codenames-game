@@ -16,3 +16,10 @@ export type WordCardProps = {
 };
 
 export type GameStatus = "playing" | "red-won" | "blue-won";
+
+export type GameState = {
+  cards: GameCard[];
+  startingTeam: Team;
+  currentTeam: Team;
+  status: GameStatus;
+}

@@ -3,12 +3,12 @@
 import { useState, useEffect } from "react";
 import { words } from "@/src/data/words";
 import WordCard from "./WordCard";
-import type { GameCard, Team, GameStatus } from "@shared/types/game";
+import type { Team, CardType, GameCard, GameState } from "@shared/types/game";
 
-function createGameCards(): GameCard[] {
-  const startingTeam = Math.random() < 0.5 ? "red" : "blue";
+function createGame(): GameState {
+  const startingTeam: Team = Math.random() < 0.5 ? "red" : "blue";
 
-  const types = [
+  const types: CardType[] = [
     ...Array(8 + (startingTeam === "red" ? 1 : 0)).fill("red"),
     ...Array(8 + (startingTeam === "blue" ? 1 : 0)).fill("blue"),
     ...Array(7).fill("neutral"),
@@ -21,64 +21,91 @@ function createGameCards(): GameCard[] {
     [types[i], types[j]] = [types[j], types[i]];
   }
 
-  return words.map((word, index) => ({
+  const cards: GameCard[] = words.map((word, index) => ({
     id: `card-${index + 1}`,
     word,
     type: types[index],
     isRevealed: false
   }));
+
+  return {
+    cards,
+    startingTeam,
+    currentTeam: startingTeam,
+    status: "playing"
+  };
 }
 
 export default function GameBoard() {
-  const [gameStatus, setGameStatus] = useState<GameStatus>("playing");
-  const [currentTeam, setCurrentTeam] = useState<Team>("red");
-  const [cards, setCards] = useState<GameCard[] | null>(null);
+  const [game, setGame] = useState<GameState | null>(null);
   const [isSpymaster, setIsSpymaster] = useState<boolean>(false);
 
   useEffect(() => {
-    setCards(createGameCards());
+    setGame(createGame());
   }, []);
 
-  if (!cards) {
+  if (!game) {
     return <div>Loading...</div>;
   }
 
-  const endTurn = () => {
-    setCurrentTeam((prev) => (prev === "red" ? "blue" : "red"));
-  }
-
   const handleCardSelect = (cardId: string) => {
+    setGame((prevGame) => {
+      if (!prevGame || prevGame.status !== "playing" || isSpymaster) return prevGame;
 
-    const selectedCard = cards?.find((card) => card.id === cardId);
-    if (!selectedCard || selectedCard.isRevealed || gameStatus !== "playing") {
-      return;
-    }
+      const selectedCard = prevGame.cards.find((card) => card.id === cardId);
+      if (!selectedCard || selectedCard.isRevealed) return prevGame;
 
-    setCards((prevCards) => {
-      if (!prevCards) return prevCards;
-
-      return prevCards.map((card) =>
-        card.id === cardId ? { ...card, isRevealed: true } : card
+      const revealedCards = prevGame.cards.map((card) => 
+        card.id === cardId 
+          ? { ...card, isRevealed: true }
+          : card
       );
+
+      // Assassin = opposing team wins
+      if (selectedCard.type === "assassin") {
+        return {
+          ...prevGame,
+          cards: revealedCards,
+          status: prevGame.currentTeam === "red" ? "blue-won" : "red-won"
+        };
+      }
+
+      // check whether the selected card wins the game 
+      const teamHasWon = revealedCards 
+        .filter((card) => card.type === prevGame.currentTeam)
+        .every((card) => card.isRevealed);
+
+      if (teamHasWon) {
+        return {
+          ...prevGame,
+          cards: revealedCards,
+          status: prevGame.currentTeam === "red" ? "red-won" : "blue-won"
+        };
+      }
+
+      // Wrong team's card = turn ends 
+      if (selectedCard.type !== prevGame.currentTeam) {
+        return {
+          ...prevGame,
+          cards: revealedCards,
+          currentTeam: prevGame.currentTeam === "red" ? "blue" : "red"
+        }
+      }
+      
+      // Correct card = same team continues
+      return {
+        ...prevGame,
+        cards: revealedCards
+      };
     });
-
-    if (selectedCard.type === "assassin") {
-      setGameStatus(currentTeam === "red" ? "blue-won" : "red-won");
-      return;
-    }
-
-    if (selectedCard.type !== currentTeam) {
-      endTurn();
-      return;
-    }
   };
 
   const statusMessage =
-    gameStatus === "red-won"
+    game.status === "red-won"
       ? "🔴 RED TEAM WINS!"
-        : gameStatus === "blue-won"
+        : game.status === "blue-won"
       ? "🔵 BLUE TEAM WINS!"
-      : currentTeam === "red"
+      : game.currentTeam === "red"
       ? "🔴 RED TEAM'S TURN"
       : "🔵 BLUE TEAM'S TURN";
 
@@ -105,12 +132,10 @@ export default function GameBoard() {
           [ Spymaster ]
         </button>
 
-        {gameStatus !== "playing" && (
+        {game.status !== "playing" && (
           <button
             onClick={() => {
-              setGameStatus("playing");
-              setCurrentTeam("red");
-              setCards(createGameCards());
+              setGame(createGame());
             }}
             className="font-bold text-green-600"
           >
@@ -120,7 +145,7 @@ export default function GameBoard() {
       </div>
 
       <div className="grid grid-cols-5 gap-3">
-        {cards.map((card) => (
+        {game.cards.map((card) => (
           <WordCard 
             key={card.id}
             card={card} 
