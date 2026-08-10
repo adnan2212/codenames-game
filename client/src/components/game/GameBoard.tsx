@@ -32,13 +32,17 @@ function createGame(): GameState {
     cards,
     startingTeam,
     currentTeam: startingTeam,
-    status: "playing"
+    status: "playing",
+    clue: null,
+    guessCount: 0
   };
 }
 
 export default function GameBoard() {
   const [game, setGame] = useState<GameState | null>(null);
   const [isSpymaster, setIsSpymaster] = useState<boolean>(false);
+  const [clueWord, setClueWord] = useState('');
+  const [clueNumber, setClueNumber] = useState(1);
 
   useEffect(() => {
     setGame(createGame());
@@ -50,7 +54,14 @@ export default function GameBoard() {
 
   const handleCardSelect = (cardId: string) => {
     setGame((prevGame) => {
-      if (!prevGame || prevGame.status !== "playing" || isSpymaster) return prevGame;
+      if (
+        !prevGame || 
+        prevGame.status !== "playing" || 
+        isSpymaster || 
+        prevGame.clue === null
+      ) {
+          return prevGame;
+      }
 
       const selectedCard = prevGame.cards.find((card) => card.id === cardId);
       if (!selectedCard || selectedCard.isRevealed) return prevGame;
@@ -61,6 +72,8 @@ export default function GameBoard() {
           : card
       );
 
+      const newGuessCount = prevGame.guessCount + 1;
+
       // Assassin = opposing team wins
       if (selectedCard.type === "assassin") {
         return {
@@ -70,7 +83,7 @@ export default function GameBoard() {
         };
       }
 
-      // check whether the selected card wins the game 
+      // check whether the current team has revealed all of their cards 
       const teamHasWon = revealedCards 
         .filter((card) => card.type === prevGame.currentTeam)
         .every((card) => card.isRevealed);
@@ -82,20 +95,22 @@ export default function GameBoard() {
           status: prevGame.currentTeam === "red" ? "red-won" : "blue-won"
         };
       }
-
-      // Wrong team's card = turn ends 
-      if (selectedCard.type !== prevGame.currentTeam) {
+      
+      // Guess-limit condition
+      if (newGuessCount >= prevGame.clue?.number + 1) {
         return {
           ...prevGame,
           cards: revealedCards,
-          currentTeam: prevGame.currentTeam === "red" ? "blue" : "red"
+          currentTeam: prevGame.currentTeam === "red" ? "blue" : "red",
+          clue: null,
+          guessCount: 0
         }
-      }
-      
-      // Correct card = same team continues
+      } 
+
       return {
         ...prevGame,
-        cards: revealedCards
+        cards: revealedCards,
+        guessCount: newGuessCount,
       };
     });
   };
@@ -108,6 +123,26 @@ export default function GameBoard() {
       : game.currentTeam === "red"
       ? "🔴 RED TEAM'S TURN"
       : "🔵 BLUE TEAM'S TURN";
+
+  const giveClue = () => {
+    if (game.status !== "playing" || !clueWord.trim() || game.clue !== null) return;
+
+    setGame((prevGame) => {
+      if (!prevGame) return prevGame;
+
+      return {
+        ...prevGame,
+        clue: {
+          word: clueWord.trim(),
+          number: clueNumber
+        },
+        guessCount: 0
+      }
+    });
+
+    setClueWord('');
+    setClueNumber(1);
+  }
 
   return (
     <div>
@@ -144,6 +179,10 @@ export default function GameBoard() {
         )}
       </div>
 
+      {game.clue !== null && <div className="flex items-center justify-center gap-4 mb-5">
+        Guesses: {game.guessCount} / {game.clue.number + 1}
+      </div>}
+
       <div className="grid grid-cols-5 gap-3">
         {game.cards.map((card) => (
           <WordCard 
@@ -154,6 +193,68 @@ export default function GameBoard() {
           />
         ))}
       </div>
+
+      <div>
+        {isSpymaster && game.clue == null && (
+          <div className="mb-5 mt-5 flex items-center justify-center gap-3">
+            <input
+              type="text"
+              value={clueWord}
+              onChange={(e) => setClueWord(e.target.value)}
+              placeholder="Enter clue"
+              className="rounded border px-3 py-2"
+            />
+
+            <input
+              type="number"
+              min={1}
+              max={9}
+              value={clueNumber}
+              onChange={(e) => setClueNumber(Number(e.target.value))}
+              className="w-20 rounded border px-3 py-2"
+            />
+
+            <button
+              onClick={giveClue}
+              className="font-bold text-2xl text-green-600"
+            >
+              [ Give Clue ]
+            </button>
+          </div>
+        )}
+      </div>
+
+      {game.clue && (
+        <div className="mb-5 mt-5 flex items-center justify-center gap-3">
+          <div className="rounded border px-3 py-2">
+            {game.clue.word}
+          </div>
+
+          <div className="w-20 rounded border px-3 py-2">
+           {game.clue.number}
+          </div>
+
+          {!isSpymaster && <button
+            onClick={() => {
+              setGame((prevGame) => {
+                if (!prevGame) return prevGame;
+                return {
+                  ...prevGame,
+                  currentTeam: prevGame.currentTeam === "red" ? "blue" : "red",
+                  clue: null,
+                  guessCount: 0
+                }
+              });
+
+              setClueWord('');
+              setClueNumber(1);
+            }}
+            className="font-bold text-2xl text-red-600"
+          >
+            [ End Guess ]
+          </button>}
+        </div>
+      )}
     </div>
   );
 }
