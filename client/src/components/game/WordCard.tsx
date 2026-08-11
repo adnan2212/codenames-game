@@ -19,14 +19,21 @@ export default function WordCard({
 
   return (
     <button
+      disabled={isSpymaster}
       onClick={onSelect}
       className={`
-        flex aspect-4/3 items-center justify-center
+        flex flex-col aspect-4/3 items-center justify-center
         rounded-lg border-2 p-4 font-bold text-black shadow transition
         ${cardColor}
       `}
     >
       {card.word}
+
+      {isSpymaster && card.isRevealed && (
+        <span className="mt-1 text-sm font-normal">
+          Revealed
+        </span>
+      )}
     </button>
   );
 }
