@@ -3,7 +3,8 @@ import type { WordCardProps } from "@shared/types/game";
 export default function WordCard({ 
   card,
   onSelect,
-  isSpymaster
+  isSpymaster,
+  disabled
 }: WordCardProps) {
   const showType = isSpymaster || card.isRevealed;
 
@@ -19,7 +20,7 @@ export default function WordCard({
 
   return (
     <button
-      disabled={isSpymaster}
+      disabled={disabled}
       onClick={onSelect}
       className={`
         flex flex-col aspect-4/3 items-center justify-center

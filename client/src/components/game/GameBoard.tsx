@@ -1,55 +1,69 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { createGame, selectCard, giveClue, endTurn } from "@/src/game/gameLogic";
 import WordCard from "./WordCard";
-import type { GameState } from "@shared/types/game";
+import { usePlayer } from "@/src/hooks/usePlayer";
+import { socket } from "@/src/lib/socket";
+import type { GameBoardProps, GameState } from "@shared/types/game";
 
-export default function GameBoard() {
+export default function GameBoard({ roomId }: GameBoardProps) {
+  const { currentPlayer } = usePlayer();
+
   const [game, setGame] = useState<GameState | null>(null);
-  const [isSpymaster, setIsSpymaster] = useState<boolean>(false);
   const [clueWord, setClueWord] = useState('');
   const [clueNumber, setClueNumber] = useState(1);
 
   useEffect(() => {
-    setGame(createGame());
+    const handleGameState = (gameState: GameState) => {
+      console.log('GAME_STATE_RECEIVED', gameState);
+      setGame(gameState);
+    }
+
+    socket.on("game:state", handleGameState);
+
+    return () => {
+      socket.off("game:state", handleGameState);
+    }
   }, []);
 
   if (!game) {
     return <div>Loading...</div>;
   }
 
-  const handleCardSelect = (cardId: string) => {
-    setGame((prevGame) => {
-      if (!prevGame) return prevGame;
+  if (!currentPlayer) {
+    return <div>Connecting to room...</div>;
+  }
 
-      return selectCard(prevGame, cardId);
+  const handleCardSelect = (cardId: string) => {
+    if (!currentPlayer) return;
+
+    socket.emit("game:select-card", {
+      roomId,
+      cardId
     });
   };
 
   const handleGiveClue = () => {
-    setGame((prevGame) => {
-      if (!prevGame) return prevGame;
-
-      return giveClue(prevGame, clueWord, clueNumber);
+    socket.emit("game:give-clue", {
+      roomId,
+      playerId: currentPlayer.id,
+      word: clueWord,
+      number: clueNumber,
     });
+
     setClueWord('');    
     setClueNumber(1);
   }
 
   const handleEndTurn = () => {
-    setGame((prevGame) => {
-      if (!prevGame) return prevGame;
-
-      return endTurn(prevGame);
+    socket.emit("game:end-turn", {
+      roomId
     });
     setClueWord('');    
     setClueNumber(1);
   }
 
-  const handleResetGame = () => {
-    setGame(createGame());
-  }
+  const handleResetGame = () => {}
 
   const statusMessage =
     game.status === "red-won"
@@ -74,22 +88,54 @@ export default function GameBoard() {
           )}
       </div>
 
-      <div className="flex items-center justify-center gap-4 mb-5">
-        <span>Choose a view:</span>
+      <div className="mb-6 text-white">
+        <h2 className="mb-3 text-lg font-bold">
+          Players
+        </h2>
 
-        <button
-          onClick={() => setIsSpymaster(false)}
-          className={!isSpymaster ? "font-bold text-blue-600" : "text-gray-500"}
-        >
-          [ Operative ]
-        </button>
+        <div className="space-y-2">
+          {game.players.map((player) => (
+            <div
+              key={player.id}
+              className="rounded border border-gray-600 p-2"
+            >
+              <strong>{player.name}</strong>
 
-        <button
-          onClick={() => setIsSpymaster(true)}
-          className={isSpymaster ? "font-bold text-red-600" : "text-gray-500"}
-        >
-          [ Spymaster ]
-        </button>
+              {" — "}
+
+              {player.team === "red" ? "🔴 Red" : "🔵 Blue"}
+
+              {" — "}
+
+              {player.role === "spymaster"
+                ? "🕵️ Spymaster"
+                : "👤 Operative"}
+            </div>
+          ))}
+        </div>
+      </div>
+
+
+      <div className="mb-5 flex items-center justify-center gap-4">
+        <div>
+          You are: <strong>{currentPlayer.name}</strong>
+        </div>
+
+        <div>
+          Team:{" "}
+          <strong>
+            {currentPlayer.team === "red" ? "🔴 Red" : "🔵 Blue"}
+          </strong>
+        </div>
+
+        <div>
+          Role:{" "}
+          <strong>
+            {currentPlayer.role === "spymaster"
+              ? "🕵️ Spymaster"
+              : "👤 Operative"}
+          </strong>
+        </div>
 
         {game.status !== "playing" && (
           <button
@@ -113,16 +159,26 @@ export default function GameBoard() {
       <div className="grid grid-cols-5 gap-3">
         {game.cards.map((card) => (
           <WordCard 
+            disabled={
+              currentPlayer.role !== "operative" ||
+              currentPlayer.team !== game.currentTeam ||
+              game.phase !== "guessing" ||
+              card.isRevealed
+            }
             key={card.id}
             card={card} 
             onSelect={() => handleCardSelect(card.id)}
-            isSpymaster={isSpymaster}
+            isSpymaster={currentPlayer.role === "spymaster"}
           />
         ))}
       </div>
 
       <div>
-        {isSpymaster && game.phase === "clue" && game.status === "playing" && (
+        {
+          currentPlayer.team === game.currentTeam &&
+          currentPlayer.role === "spymaster" &&
+          game.phase === "clue" && 
+          game.status === "playing" && (
           <div className="mb-5 mt-5 flex items-center justify-center gap-3">
             <input
               type="text"
@@ -161,12 +217,17 @@ export default function GameBoard() {
            {game.clue.number}
           </div>
 
-          {!isSpymaster && game.phase === "guessing" && game.clue && <button
+          { 
+            currentPlayer.role === "operative" && 
+            currentPlayer.team === game.currentTeam &&
+            game.phase === "guessing" && 
+            game.clue && <button
             onClick={handleEndTurn}
             className="font-bold text-2xl text-red-600"
           >
             [ End Guess ]
-          </button>}
+          </button>
+          }
         </div>
       )}
     </div>

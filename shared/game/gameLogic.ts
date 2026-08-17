@@ -1,5 +1,5 @@
-import { words } from "@/src/data/words";
-import type { Team, CardType, GameCard, GameState } from "@shared/types/game";
+import { getRandomWords } from "../data/words";
+import type { Team, CardType, GameCard, GameState } from "../types/game";
 
 export function createGame(): GameState {
   const startingTeam: Team = Math.random() < 0.5 ? "red" : "blue";
@@ -17,6 +17,8 @@ export function createGame(): GameState {
     [types[i], types[j]] = [types[j], types[i]];
   }
 
+  const words = getRandomWords();
+
   const cards: GameCard[] = words.map((word, index) => ({
     id: `card-${index + 1}`,
     word,
@@ -26,6 +28,8 @@ export function createGame(): GameState {
 
   return {
     cards,
+    players: [],
+    currentPlayerId: "",
     startingTeam,
     currentTeam: startingTeam,
     status: "playing",
@@ -37,14 +41,27 @@ export function createGame(): GameState {
 
 export function selectCard(
   game: GameState,
+  playerId: string,
   cardId: string,
 ): GameState {
   if (game.status !== "playing" || game.phase !== "guessing") {
     return game;
   }
 
+  const player = game.players.find((player) => player.id === playerId);
+
+  if (
+    !player ||
+    player.role !== "operative" || 
+    player.team !== game.currentTeam
+  ) {
+    return game;
+  }
+
   const selectedCard = game.cards.find((card) => card.id === cardId);
-  if (!selectedCard || selectedCard.isRevealed) return game;
+  if (!selectedCard || selectedCard.isRevealed) {
+    return game;
+  }
 
   const updatedCards = game.cards.map((card) => {
     if (card.id === cardId) {
@@ -83,7 +100,7 @@ export function selectCard(
       ...game,
       cards: updatedCards,
       guessCount: newGuessCount
-    })
+    }, player.id)
   } 
 
   return { 
@@ -95,24 +112,51 @@ export function selectCard(
 
 export function giveClue(
   game: GameState,
+  playerId: string,
   word: string,
   number: number
 ): GameState {
   if (game.status !== "playing" || game.phase !== "clue" || game.clue !== null) return game;
 
- return {
-  ...game,
-  clue: {
-    word,
-    number
-  },
-  guessCount: 0,
-  phase: "guessing"
- }
+  const player = game.players.find((player) => player.id === playerId);
+
+  if (
+    !player ||
+    player.role !== 'spymaster' ||
+    player.team !== game.currentTeam
+  ) {
+    return game;
+  }
+
+  return {
+    ...game,
+    clue: {
+      word,
+      number
+    },
+    guessCount: 0,
+    phase: "guessing"
+  }
 }
 
-export function endTurn(game: GameState): GameState {
+export function endTurn(game: GameState, playerId: string): GameState {
   if (game.status !== "playing" || game.phase !== "guessing") return game;
+  
+  const player = game.players.find(
+    (player) => player.id === playerId
+  );
+
+  if (!player) {
+    return game;
+  }
+
+  if (
+    player.role !== "operative" ||
+    player.team !== game.currentTeam
+  ) {
+    return game;
+  }
+
 
   return {
     ...game,
