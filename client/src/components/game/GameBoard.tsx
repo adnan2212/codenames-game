@@ -2,33 +2,12 @@
 
 import { useState, useEffect } from "react";
 import WordCard from "./WordCard";
-import { usePlayer } from "@/src/hooks/usePlayer";
 import { socket } from "@/src/lib/socket";
-import type { GameBoardProps, GameState } from "@shared/types/game";
+import type { GameBoardProps } from "@shared/types/game";
 
-export default function GameBoard({ roomId }: GameBoardProps) {
-  const { currentPlayer } = usePlayer();
-
-  const [game, setGame] = useState<GameState | null>(null);
+export default function GameBoard({ roomId, game, currentPlayer }: GameBoardProps) {
   const [clueWord, setClueWord] = useState('');
   const [clueNumber, setClueNumber] = useState(1);
-
-  useEffect(() => {
-    const handleGameState = (gameState: GameState) => {
-      console.log('GAME_STATE_RECEIVED', gameState);
-      setGame(gameState);
-    }
-
-    socket.on("game:state", handleGameState);
-
-    return () => {
-      socket.off("game:state", handleGameState);
-    }
-  }, []);
-
-  if (!game) {
-    return <div>Loading...</div>;
-  }
 
   if (!currentPlayer) {
     return <div>Connecting to room...</div>;
